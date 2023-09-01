@@ -3,13 +3,13 @@ from pandas.api.types import is_numeric_dtype
 import numpy as np
 import ast
 
-PATH = "C:/Users/noeam/Documents/git/github/ssocial/data/"
-# PATH = "~/ServicioSocial/ssocial/data/"
-INSTRUCTIONS_FNAME = "instruccionesH7.csv"
-DF1_DATA_FNAME = "2014_datos.csv"
-DF1_DICT_FNAME = "2014_diccionario.csv"
-DF2_DATA_FNAME = "fmed_datos.csv"
-DF2_DICT_FNAME = "fmed_diccionario.csv"
+#PATH = "~/Documents/git/gitlab/conductome-data-processing/"
+PATH = "/Users/noeag/Documents/Git/gitc3/conductome-data-processing/"
+INSTRUCTIONS_FNAME = "fmed-to-2014/data/instrucciones.csv"
+DF1_DATA_FNAME = "fmed-to-2014/data/2014_datos.csv"
+DF1_DICT_FNAME = "fmed-to-2014/data/2014_diccionario.csv"
+DF2_DATA_FNAME = "fmed-to-2014/data/fmed_datos.csv"
+DF2_DICT_FNAME = "fmed-to-2014/data/fmed_diccionario.csv"
 
 
 def read_data():
@@ -138,6 +138,14 @@ def recode(df2_data, df2_data_new, new_column_name, df2_column_name, actions):
     how_recode = actions['recode']
     # Aplicar el mapeo usando el método map
     df2_data_new[new_column_name] = df2_data[df2_column_name].map(how_recode)
+
+    validacion_recode = get_distribution(df2_data, df2_data_new, df2_column_name, new_column_name, how_recode)
+    
+    if validacion_recode == True:
+        print('Recodificación EXITOSA')
+    else:
+        print('PROBLEMAS en la recodificación')
+
     return df2_data_new
 
 
@@ -162,6 +170,13 @@ def recode_extend(df2_data, df2_data_new, new_column_name, df2_column_name, acti
     # Aplicar el mapeo usando el método map
     df2_data_new[new_column_name] = df2_data[df2_column_name].map(how_recode)
     description_final = description_df1
+
+    validacion_recode = get_distribution(df2_data, df2_data_new, df2_column_name, new_column_name, how_recode)
+    if validacion_recode == True:
+        print('Recodificación EXITOSA')
+    else:
+        print('PROBLEMAS en la recodificación')
+
     return df2_data_new, description_final
 
 def convert_to_numeric(column):
@@ -252,6 +267,24 @@ def new_options(actions):
     options_updated['options'] = options
     return options_updated
 
+def add_to_new_dict(df2_dict_new, code, description, options, category):
+    """
+    Add a new register to a dictionary-like DataFrame.
+
+    Args:
+        df2_dict_new (pandas.DataFrame): The DataFrame where the new register will be added.
+        code (str): The unified code of the new register.
+        description (str): The description of the new register.
+        options (str): The dictionary of options related to the new register.
+        category (str): The category of the new register.
+
+    Returns:
+        df2_dict_new (pd.DataFrame): The updated DataFrame with the new register added.
+
+    """
+    new_register = {'campo_unificado': code, 'description': description, 'options': options, 'category': category}
+    df2_dict_new.loc[len(df2_dict_new.index)] = new_register
+    return df2_dict_new
 
 def apply_actions(df2_data, df2_data_new, new_column_name, description_df1, description_df2, description_final,
                     value_options, options_updated, actions, df1_column_name, df2_column_name, category):
@@ -316,29 +349,77 @@ def apply_actions(df2_data, df2_data_new, new_column_name, description_df1, desc
     return code, description, options, categoria
 
 
-def add_to_new_dict(df2_dict_new, code, description, options, category):
-    """
-    Add a new register to a dictionary-like DataFrame.
-
-    Args:
-        df2_dict_new (pandas.DataFrame): The DataFrame where the new register will be added.
-        code (str): The unified code of the new register.
-        description (str): The description of the new register.
-        options (str): The dictionary of options related to the new register.
-        category (str): The category of the new register.
-
-    Returns:
-        df2_dict_new (pd.DataFrame): The updated DataFrame with the new register added.
-
-    """
-    new_register = {'campo_unificado': code, 'description': description, 'options': options, 'category': category}
-    df2_dict_new.loc[len(df2_dict_new.index)] = new_register
-    return df2_dict_new
-
-
-def get_distribution(df2_data_new, df2_data, new_column_name, df2_column_name):
+def get_distribution2(df2_data, df2_data_new, df2_column_name, new_column_name):
     #Descomentar las siguientes tres lineas si queremos observar la distribucion de los valores.
     conteos_df_new = df2_data_new[new_column_name].value_counts()
     conteos_df_old = df2_data[df2_column_name].value_counts()
-    print(conteos_df_old, conteos_df_new)
-    return 0
+    #print(conteos_df_old, conteos_df_new)
+    state = all(conteos_df_old.reset_index(drop=True) == conteos_df_new.reset_index(drop=True))
+    return state
+
+def get_distribution(df2_data, df2_data_new, df2_column_name, new_column_name, how_recode):
+    count_keys, count_values = count_relation(df2_data, df2_data_new, df2_column_name, new_column_name, how_recode)
+    print(f'Relacion de recodificación: {how_recode}')
+    print(f'Conteo de llaves: {count_keys}')
+    print(f'Conteo de valores: {count_values}')
+    count_values_actualizado = check_dict_relation(how_recode, count_keys, count_values)
+    for valor in count_values_actualizado.values():
+        if valor != 0:
+            return False
+    return True
+
+def count_relation(df2_data, df2_data_new, df2_column_name, new_column_name, how_recode):
+    """
+    Esta función cuenta el número de apariciones de las llaves del diccionario how_recode en col1 y el número de
+    apariciones de los valores de cada llave en how_recode en col2.
+
+    Args:
+        df2_data (pandas.DataFrame): The DataFrame that contains the column to modify.
+        df2_data_new (pandas.DataFrame): The new DataFrame where the modified column will be added.
+        df2_column_name (str): The name of the column in the second DataFrame.
+        new_column_name (str): The name of the new column to be created.
+        how_recode (dict): Diccionario que relaciona las llaves de df2_column_name con los valores de new_column_name.
+
+    Returns:
+        tuple: Retorna una tupla con dos diccionarios. El primer diccionario contiene la cuenta de las llaves en df2_column_name
+        y el segundo diccionario contiene la cuenta de los valores de cada llave en new_column_name según how_recode.
+    """
+    col1 = df2_data[df2_column_name].tolist()
+    col2 = df2_data_new[new_column_name].tolist()
+    count_keys = {}
+    count_values = {}
+
+    # Obtener las llaves únicas presentes en col1
+    unique_keys = set(col1)
+
+    for key in unique_keys:
+        # Contar el número de apariciones de la llave en col1
+        count_keys[key] = col1.count(key)
+        if key in how_recode:
+            # Obtener el valor asociado con la llave
+            value = how_recode[key]
+            # Contar el número de apariciones del valor en col2
+            count_values[value] = col2.count(value)
+        #else:
+        #    print(f'Error con la llave {key} en {df2_column_name}')
+
+    return count_keys, count_values
+
+def check_dict_relation(how_recode, count_keys, count_values):
+    """
+    Esta función comprueba si la relación establecida en how_recode se cumple en los diccionarios count_keys y
+    count_values.
+
+    Args:
+        how_recode (dict): Diccionario que relaciona las llaves de count_keys con los valores de count_values.
+        count_keys (dict): Diccionario con la cuenta de las llaves de how_recode en una columna del dataframe.
+        count_values (dict): Diccionario con la cuenta de los valores de how_recode en otra columna del dataframe.
+
+    Returns:
+        dict: Retorna el diccionario count_values actualizado después de haber comprobado la relación how_recode.
+    """
+    for key, value in how_recode.items():
+        if key in count_keys:
+            count_key = count_keys[key]
+            count_values[value] -= count_key
+    return count_values
